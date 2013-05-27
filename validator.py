@@ -6,11 +6,14 @@ import struct
 from hashlib import sha256
 
 class Database(object):
-    def __init__(self, dir='./db/'):
+    def __init__(self,dir='./db/',*params):
         if(dir != None):
             self.dbDir = dir
         else:
             self.dbDir = '.'
+
+        if(params != None):
+            self.useDatabase(params[0])
 
     def listDatabases(self):
         '''List all databases'''
@@ -55,7 +58,7 @@ class Database(object):
         if(self.currentDb != None):
             for paths,dirs,files in os.walk('.'):
                 for f in files:
-                    self.files.append(f)
+                    self.files.append(DbFile(f,self.currentDb))
         return self.files
 
     def countDbFiles(self):
@@ -77,6 +80,45 @@ class DbFile(object):
         self.DB = db
         self.NOTFINISHED = 48
         self.fileOffset = 0
+        self.blocks = []
+
+        self.getBlocks()
+
+    def getBlocks(self):
+        i = 0
+        while self.FILESIZE > self.fileOffset:
+            self.blocks.append(Block(self.fileOffset,self.file))
+            blockLen = self.blocks[i]().BLOCKLENGTH
+            i = i + 1
+            self.fileOffset = self.fileOffset + blockLen
+
+class Block(object):
+    def __init__(self,filePos,myFile):
+        self.FILE = myFile
+        self.VERSIONLEN = 4
+        self.TIMESTAMPLEN = 8
+        self.HASHLEN = 64
+        self.LENGTHLEN = 4
+        self.LENGTHOFFSET = self.VERSIONLEN + self.TIMESTAMPLEN + self.HASHLEN
+        self.BLOCKORDER = ('version','timestamp','hash','length','json')
+        self.filePos = filePos
+        self.JSONLEN = self.getJSONLength()
+        self.BLOCKLENGTH = self.getTotalBlockLength()
+
+    def getJSONLength(self):
+        self.FILE.seek(self.filePos + self.LENGTHOFFSET)
+        bits = self.FILE.read(self.LENGTHLEN)
+        return struct.unpack("<I", bits)[0]
+
+    def getTotalBlockLength(self):
+        return int(self.VERSIONLEN) + int(self.TIMESTAMPLEN) + int(self.HASHLEN) + int(self.LENGTHLEN) + int(self.JSONLEN)
+
+    def setFilePos(pos):
+        self.filePos = pos
+
+class Validator():
+    def __init__(self):
+        self.db = Database()
 
     def validateHeader(self):
         '''Begin validating all Fields'''
@@ -102,24 +144,6 @@ class DbFile(object):
         print "%s - %s" % (fileIndex[1:],self.file.read(self.INDEXLEN))
         return fileIndex[1:] == self.file.read(self.INDEXLEN)
 
-class Block(object):
-    def __init__(self,filePos,file):
-        self.VERSIONLEN = 4
-        self.TIMESTAMPLEN = 8
-        self.HASHLEN = 32
-        self.LENGHTLEN = 4
-        self.LENGTHOFFSET = self.VERSIONLEN + self.TIMESTAMPLEN + self.HASHLEN
-        self.BLOCKORDER = ('version','timestamp','hash','length','json')
-        self.JSONLEN = self.getJSONLength()
-        self.BLOCKLENGTH = self.getTotalBlockLength()
-        self.filePos = filePos
-
-    def getJSONLength():
-        self.FILE.seek(self.filePos + self.LENGTHOFFSET)
-        return int(self.FILE.read(self.LENGHTLEN))
-
-    def getTotalBlockLength():
-        return self.VERSIONLEN + self.TIMESTAMPLEN + self.HASHLEN + self.LENGTHLEN + self.JSONLEN
 
 class ValidationError(Exception):
     def __init__(self, value):
@@ -136,9 +160,10 @@ class DatabaseError(Exception):
         return repr(self.value)
 
 if __name__ == '__main__':
-    db = Database()
-    db.useDatabase('knicks')
+    myParams = ('knicks')
+    db = Database('./db/',myParams)
     dbFiles = db.getDbFiles()
     for name in dbFiles:
-        currentFile = DbFile(name, db.currentDb)
-        currentFile.validateHeader()
+        print name
+        #currentFile = DbFile(name, db.currentDb)
+        #currentFile.validateHeader()
